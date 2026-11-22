@@ -16,6 +16,7 @@ int main(int argc, char **argv) {
     int required = argc == 2 && !strcmp(argv[1], "--require-device");
     int error = 0;
     CHECK(audio_output_clock() > 0);
+    CHECK(audio_output_can_submit(NULL) == 0);
     CHECK(audio_output_device(-1, (char[16]){0}, 16) < 0);
     char name[1024];
     for (int pass = 0; pass < 3; ++pass)
@@ -52,7 +53,21 @@ int main(int argc, char **argv) {
             CHECK(paused >= 0);
             wait_ms();
             CHECK(audio_output_buffered(output) == paused);
+#if defined(_WIN32) || defined(__APPLE__)
+            for (int64_t bytes = 0; bytes < capacity && audio_output_can_submit(output) == 1; bytes += count)
+                CHECK(audio_output_submit(output, silence, count) == 0);
+            CHECK(audio_output_can_submit(output) == 0);
+#endif
+#if defined(_WIN32)
+            int64_t before_resume = audio_output_buffered(output);
+#endif
             CHECK(audio_output_set_active(output, 1) == 0);
+#if defined(_WIN32)
+            wait_ms();
+            CHECK(audio_output_set_active(output, 0) == 0);
+            int64_t partially_played = audio_output_buffered(output);
+            CHECK(partially_played > 0 && partially_played < before_resume);
+#endif
         } else printf("native-manual-pause-unsupported (%d)\n", pause_status);
         CHECK(audio_output_poll(output, 1) == 0);
         CHECK(audio_output_close(output) == 0);

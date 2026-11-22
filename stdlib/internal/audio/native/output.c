@@ -40,6 +40,9 @@ struct AudioOutput {
     HWAVEOUT device;
     WAVEHDR buffers[SLOT_COUNT];
     uint8_t storage[SLOT_COUNT][SLOT_BYTES];
+    uint64_t submitted_bytes, played_units;
+    DWORD last_position;
+    UINT position_type;
 #elif defined(__APPLE__)
     AudioQueueRef queue;
     AudioQueueBufferRef buffers[SLOT_COUNT];
@@ -374,12 +377,21 @@ JAI_AUDIO_API AudioOutput *audio_output_open(int rate, int channels, int *error)
 JAI_AUDIO_API int64_t audio_output_buffered(AudioOutput *output) {
     if (!output) return -1;
 #if defined(_WIN32)
-    int64_t bytes = 0;
-    for (int i = 0; i < SLOT_COUNT; ++i) {
-        WAVEHDR *buffer = &output->buffers[i];
-        if ((buffer->dwFlags & WHDR_PREPARED) && !(buffer->dwFlags & WHDR_DONE)) bytes += buffer->dwBufferLength;
-    }
-    return bytes;
+    MMTIME position = {0};
+    position.wType = TIME_BYTES;
+    MMRESULT result = waveOutGetPosition(output->device, &position, sizeof(position));
+    if (result) return -(int64_t)result;
+    if (position.wType != TIME_BYTES && position.wType != TIME_SAMPLES && position.wType != TIME_MS)
+        return -MMSYSERR_NOTSUPPORTED;
+    if (output->position_type && output->position_type != position.wType) return -MMSYSERR_NOTSUPPORTED;
+    output->position_type = position.wType;
+    DWORD units = position.u.cb;
+    output->played_units += (DWORD)(units - output->last_position);
+    output->last_position = units;
+    uint64_t played = output->played_units;
+    if (position.wType == TIME_SAMPLES) played *= (unsigned)output->channels * 2;
+    else if (position.wType == TIME_MS) played = played * (unsigned)output->rate * (unsigned)output->channels * 2 / 1000;
+    return played < output->submitted_bytes ? (int64_t)(output->submitted_bytes - played) : 0;
 #elif defined(__APPLE__)
     return atomic_load(&output->queued);
 #else
@@ -387,6 +399,21 @@ JAI_AUDIO_API int64_t audio_output_buffered(AudioOutput *output) {
     int result = snd_pcm_delay(output->pcm, &frames);
     if (result < 0) return result;
     return frames > 0 ? frames * output->channels * 2 : 0;
+#endif
+}
+
+JAI_AUDIO_API int audio_output_can_submit(AudioOutput *output) {
+    if (!output) return 0;
+#if defined(_WIN32)
+    for (int i = 0; i < SLOT_COUNT; ++i)
+        if (!(output->buffers[i].dwFlags & WHDR_PREPARED) || (output->buffers[i].dwFlags & WHDR_DONE)) return 1;
+    return 0;
+#elif defined(__APPLE__)
+    for (int i = 0; i < SLOT_COUNT; ++i)
+        if (!atomic_load(&output->occupied[i])) return 1;
+    return 0;
+#else
+    return 1;
 #endif
 }
 
@@ -406,7 +433,9 @@ JAI_AUDIO_API int audio_output_submit(AudioOutput *output, const void *bytes, in
         buffer->dwBufferLength = (DWORD)count;
         int result = (int)waveOutPrepareHeader(output->device, buffer, sizeof(*buffer));
         if (result) return result;
-        return (int)waveOutWrite(output->device, buffer, sizeof(*buffer));
+        result = (int)waveOutWrite(output->device, buffer, sizeof(*buffer));
+        if (!result) output->submitted_bytes += (unsigned)count;
+        return result;
     }
     return -2;
 #elif defined(__APPLE__)

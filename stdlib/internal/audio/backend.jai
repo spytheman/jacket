@@ -237,7 +237,7 @@ report_backend_notice :: () {
 }
 
 backend_can_fill :: () -> bool {
-    return output_handle != null && !device_lost && !device_paused && !region_locked;
+    return output_handle != null && !device_lost && !device_paused && !region_locked && audio_output_can_submit(output_handle) != 0;
 }
 
 backend_current_rate :: () -> s64 {
@@ -286,6 +286,7 @@ audio_output_close :: (output: *void) -> s32 #foreign native;
 audio_output_device :: (index: s32, name: *u8, capacity: s32) -> s32 #foreign native;
 audio_output_buffered :: (output: *void) -> s64 #foreign native;
 audio_output_submit :: (output: *void, bytes: *u8, count: s32) -> s32 #foreign native;
+audio_output_can_submit :: (output: *void) -> s32 #foreign native;
 audio_output_play :: (output: *void) -> s32 #foreign native;
 audio_output_clock :: () -> float64 #foreign native;
 audio_output_rate :: (output: *void) -> s32 #foreign native;

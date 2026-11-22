@@ -54,11 +54,7 @@ sound_player_init :: (given_config: Sound_Player_Config) -> bool {
     async_exit = false;
     last_entity_time = audio_wall_time();
 
-    for 0..7 {
-        buffered, minimum := backend_count_buffered_bytes();
-        if buffered >= minimum break;
-        update_from_async_thread(false);
-    }
+    update_from_async_thread(false);
 
     if !start_output_if_possible() {
         #if VERBOSE context.logger("Sound_Player: output start failed\n", context.logger_data, Log_Info.{});
@@ -365,6 +361,7 @@ post_entity_update :: (dt: float) {
 
 // Advances the player by one frame. Call it once per frame. `dt` is the seconds since the last
 // call; leave it out to have the player measure it.
+// With frame-driven mixing, each call fills the measured output deficit in bounded chunks.
 //
 // ```jai,no_run,skip_on(wasm)
 // while true {
@@ -451,28 +448,40 @@ update_from_async_thread :: (actually_async: bool) {
 
     buffered, minimum := backend_count_buffered_bytes();
 
-    if !backend_can_fill() return;
     if buffered >= minimum return;
 
     // Only the producer owns native regions. Native polling/copy/commit do not
     // hold the stream lock; rendering acquires it for each bounded chunk.
     chunk := max(cast(s64) 4096, (minimum + 7) / 8);
     chunk = (chunk + alignment - 1) / alignment * alignment;
-    bytes := min(chunk, minimum - buffered);
-    bytes -= bytes % alignment;
-    if bytes == 0 return;
+    remaining := minimum - buffered;
+    remaining -= remaining % alignment;
+    while remaining > 0 && backend_can_fill() {
+        bytes := min(chunk, remaining);
+        regions, success := backend_lock_fill_regions(bytes);
 
-    regions, success := backend_lock_fill_regions(bytes);
+        assert(success, "audio output buffer unavailable");
+        fill_sample_buffer(regions.buffer0);
+        if regions.buffer1.count > 0 fill_sample_buffer(regions.buffer1);
 
-    assert(success, "audio output buffer unavailable");
-    fill_sample_buffer(regions.buffer0);
-    if regions.buffer1.count > 0 fill_sample_buffer(regions.buffer1);
-
-    backend_release_fill_regions(regions);
+        backend_release_fill_regions(regions);
+        remaining -= bytes;
+    }
 }
 
 // The body of the audio thread.
 async_audio_update :: (thread: *Thread) -> s64 {
+    #if OS == .WINDOWS {
+        limits: Audio_Windows.TIMECAPS;
+        queried := Audio_Windows.timeGetDevCaps(*limits, size_of(Audio_Windows.TIMECAPS));
+        if queried != 0 audio_fatal("audio timer capability query failed");
+        started := Audio_Windows.timeBeginPeriod(limits.wPeriodMin);
+        if started != 0 audio_fatal("audio timer resolution request failed");
+        defer {
+            ended := Audio_Windows.timeEndPeriod(limits.wPeriodMin);
+            if ended != 0 audio_fatal("audio timer resolution release failed");
+        }
+    }
     if player_config.set_async_thread_priority player_config.set_async_thread_priority();
 
     while true {
@@ -490,6 +499,8 @@ async_audio_update :: (thread: *Thread) -> s64 {
 }
 
 #scope_module
+#if OS == .WINDOWS Audio_Windows :: #import "internal/bindings/windows-api";
+
 lock_player :: () {
     if sound_mutex_ready lock(*sound_mutex);
 }

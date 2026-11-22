@@ -1,5 +1,11 @@
 # Sound_Player
 
+Each producer update refills the measured queue deficit in bounded chunks, stopping
+when the native buffer pool is full. With frame-driven mixing, call `update` within
+`seconds_to_fill_ahead`; the default audio worker runs independently of frames.
+
+Windows queue depth excludes already-played bytes in the current buffer. The worker
+requests the supported timer resolution while running and releases it on shutdown.
 
 ## Public declaration inventory
 

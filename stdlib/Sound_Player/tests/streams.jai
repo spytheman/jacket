@@ -1,4 +1,4 @@
-// test: only(.LINUX,.MACOS)
+// test: only(.WINDOWS,.LINUX,.MACOS)
 #import "Basic";
 #import "Sound_Player";
 
@@ -81,14 +81,11 @@ main :: () {
 
     set_repeating(stream, true);
     start_playing(stream);
-    // The device may still be playing the silence queued during initialization.
-    // Render explicitly instead of assuming it consumes that queue within a fixed time.
-    properties := backend_init(config);
-    output: [8] s16;
-
-    fill_sample_buffer(.{ properties.num_channels * 2, cast(*u8) output.data });
+    rate := get_audio_sampling_rate();
+    // The worker must keep producing without main-thread entity or renderer updates.
+    sleep_milliseconds(300);
     // Shutdown joins the async worker before we inspect its priority hook's count.
     sound_player_shutdown();
-    assert(released == 19 && last_streamed > 0 && priority_calls == 1);
+    assert(released == 19 && last_streamed >= rate / 5 && priority_calls == 1);
     print("ok\n");
 }

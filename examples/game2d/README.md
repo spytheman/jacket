@@ -58,3 +58,7 @@ with native queries beside it. Tests are `Window_Creation/tests/dpi.jai`,
 pure DPI rules and Windows suggested-rectangle test. Dependencies are the repo's native
 Simp/audio/image/compression libraries, Mesa on software desktops, and an optional backend
 under `server/`. See [FRICTION.md](FRICTION.md) for remaining limitations.
+
+Music mixes on the audio worker so drawing and window event handling do not delay
+refills. `Sound_Player/tests/refill-deficit.jai` and `streams.jai` cover replenishing
+the queue and mixing through a main-thread stall.
