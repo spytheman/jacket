@@ -474,14 +474,18 @@ async_audio_update :: (thread: *Thread) -> s64 {
     #if OS == .WINDOWS {
         limits: Audio_Windows.TIMECAPS;
         queried := Audio_Windows.timeGetDevCaps(*limits, size_of(Audio_Windows.TIMECAPS));
+
         if queried != 0 audio_fatal("audio timer capability query failed");
+
         started := Audio_Windows.timeBeginPeriod(limits.wPeriodMin);
         if started != 0 audio_fatal("audio timer resolution request failed");
+
         defer {
             ended := Audio_Windows.timeEndPeriod(limits.wPeriodMin);
             if ended != 0 audio_fatal("audio timer resolution release failed");
         }
     }
+
     if player_config.set_async_thread_priority player_config.set_async_thread_priority();
 
     while true {

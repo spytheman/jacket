@@ -82,6 +82,7 @@ main :: () {
     set_repeating(stream, true);
     start_playing(stream);
     rate := get_audio_sampling_rate();
+
     // The worker must keep producing without main-thread entity or renderer updates.
     sleep_milliseconds(300);
     // Shutdown joins the async worker before we inspect its priority hook's count.
