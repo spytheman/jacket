@@ -51,6 +51,11 @@ test does not simulate a monitor change.
 
 ## Changing it
 
+The Windows renderer keeps an already-current OpenGL context/DC pair bound across
+frames. It calls WGL when either handle changes. `Windows/tests/render-idle.jai`
+checks repeated frame selection and pixel readback; `render-lifecycle.jai` checks
+context switching and window destruction.
+
 Rendering and smoke assertions live in `game/render.jai` and `game/smoke.jai`; flags are
 in `game/main.jai`. DPI policy and parsing are private in `stdlib/internal/window/dpi.jai`,
 with native queries beside it. Tests are `Window_Creation/tests/dpi.jai`,

@@ -44,5 +44,6 @@ WINDOW_RENDER_TESTS = {
     "windows-render-events": "stdlib/Windows/tests/render-events.jai",
     "windows-render-lifecycle": "stdlib/Windows/tests/render-lifecycle.jai",
     "windows-render-public": "stdlib/Windows/tests/render-public.jai",
+    "windows-render-idle": "stdlib/Windows/tests/render-idle.jai",
     "windows-wgl-driver": "stdlib/Windows/tests/wgl-driver.jai",
 }

@@ -26,6 +26,7 @@ CASES = (
     "windows-wgl-driver",
     "windows-render-events",
     "windows-render-public",
+    "windows-render-idle",
     "windows-render-lifecycle",
 )
 

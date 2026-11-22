@@ -45,7 +45,11 @@ class WglLintContexts(unittest.TestCase):
                     job["command"][job["command"].index("--manifest") + 1],
                     job["manifest"],
                 )
-            self.assertEqual(len(public["required"]), 17)
+            self.assertEqual(len(public["required"]), 18)
+            self.assertIn(
+                runner.ROOT / "stdlib/Windows/tests/render-idle.jai",
+                public["required"],
+            )
             self.assertIn(
                 runner.ROOT / "stdlib/Gamepad/SDL_Input_Map/module.jai",
                 public["required"],
